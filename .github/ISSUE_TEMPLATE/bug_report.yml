@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible problem in the relayer boundary.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include private keys, service tokens, personal data, or production transaction secrets. Use the private security process for vulnerabilities."
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the smallest safe reproduction and local configuration details.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+    validations:
+      required: true

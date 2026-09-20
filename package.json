@@ -1,0 +1,49 @@
+{
+  "name": "@sealedcash/relayer",
+  "version": "0.1.0",
+  "description": "A fail-closed transaction submission boundary for SealedCash pool withdrawals.",
+  "type": "module",
+  "license": "MIT",
+  "author": "SealedCash <support@sealedcash.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sealedcash-org/sealedcash-relayer.git"
+  },
+  "homepage": "https://github.com/sealedcash-org/sealedcash-relayer",
+  "bugs": {
+    "url": "https://github.com/sealedcash-org/sealedcash-relayer/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "exports": {
+    ".": "./dist/index.js",
+    "./policy": "./dist/policy.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types src/**/*.test.ts",
+    "start": "node dist/server.js",
+    "dev": "node --watch --experimental-strip-types src/server.ts",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
+  },
+  "dependencies": {
+    "viem": "2.56.7",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.21",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
