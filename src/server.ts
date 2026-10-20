@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash } from "node:crypto";
 import { readConfig, isConfigured, type RelayerConfig } from "./config.js";
-import { IdempotencyStore } from "./idempotency.js";
+import { IdempotencyConflictError, IdempotencyStore } from "./idempotency.js";
 import { validateWithdrawalCalldata, RelayerPolicyError } from "./policy.js";
 import { createViemSubmissionClient, requestHash, tokensMatch, type SubmissionClient } from "./submission.js";
 
@@ -36,8 +36,6 @@ export function createRelayerServer(options?: { config?: RelayerConfig; submit?:
       if (!authorization.startsWith("Bearer ") || !tokensMatch(config.SEALEDCASH_SERVICE_TOKEN, authorization.slice(7))) return json(response, 401, { error: "unauthorized" });
       const idempotencyKey = request.headers["idempotency-key"];
       if (typeof idempotencyKey !== "string" || !/^[\x21-\x7e]{16,128}$/.test(idempotencyKey)) return json(response, 400, { error: "invalid_idempotency_key" });
-      const existing = store.get(idempotencyKey);
-      if (existing) return json(response, existing.status, existing.body);
       const parsed = await body(request);
       if (!parsed || typeof parsed !== "object") throw new RelayerPolicyError();
       const candidate = parsed as Record<string, unknown>;
@@ -49,14 +47,19 @@ export function createRelayerServer(options?: { config?: RelayerConfig; submit?:
       const operation = { calldata, value } as const;
       const digest = requestHash(operation);
       const logId = createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 12);
-      console.info(JSON.stringify({ event: "withdrawal_accepted", request: logId, operation: "withdraw", digest }));
-      const run = queue.then(() => submit(operation));
-      queue = run.then(() => undefined, () => undefined);
-      const result = await run;
-      const responseBody = { transactionHash: result.transactionHash, blockHash: result.blockHash, gasUsed: result.gasUsed.toString() };
-      store.set(idempotencyKey, { status: 200, body: responseBody });
-      return json(response, 200, responseBody);
+      const outcome = await store.execute(idempotencyKey, digest, async () => {
+        console.info(JSON.stringify({ event: "withdrawal_accepted", request: logId, operation: "withdraw", digest }));
+        const run = queue.then(() => submit(operation));
+        queue = run.then(() => undefined, () => undefined);
+        const result = await run;
+        return { status: 200, body: { transactionHash: result.transactionHash, blockHash: result.blockHash, gasUsed: result.gasUsed.toString() } };
+      });
+      return json(response, outcome.status, outcome.body);
     } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        console.warn(JSON.stringify({ event: "withdrawal_rejected", reason: "idempotency_key_reused" }));
+        return json(response, 422, { error: "idempotency_key_reused" });
+      }
       const status = error instanceof RelayerPolicyError ? 400 : 502;
       console.warn(JSON.stringify({ event: "withdrawal_rejected", reason: error instanceof RelayerPolicyError ? "invalid_request" : "submission_failed" }));
       return json(response, status, { error: status === 400 ? "invalid_request" : "submission_failed" });
